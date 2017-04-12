@@ -1,0 +1,8 @@
+/target/
+.settings
+Devp
+logs
+attached/
+.idea
+winarte-site.iml
+jdbc.properties
