@@ -10,6 +10,7 @@ import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
 import java.nio.channels.SocketChannel;
 import java.util.*;
+import java.util.concurrent.LinkedBlockingQueue;
 
 public class DefaultEventLoop implements EventLoop, Runnable {
     private static final Logger logger = LoggerFactory.getLogger(DefaultEventLoop.class);
@@ -20,14 +21,15 @@ public class DefaultEventLoop implements EventLoop, Runnable {
 
     private List<Connection> connections = new LinkedList<>();
 
+    private Queue<Runnable> tasks = new LinkedBlockingQueue<>();
+
     public DefaultEventLoop(EventLoopGroup parent, String name) {
         this.parent = parent;
         this.name = name;
 
         try {
             this.selector = Selector.open();
-        }
-        catch (IOException e) {
+        } catch (IOException e) {
             logger.error("init select error.", e);
             throw new ReactorException(e);
         }
@@ -38,8 +40,13 @@ public class DefaultEventLoop implements EventLoop, Runnable {
         final Selector selector = this.selector;
         Set<SelectionKey> selectedKeys = null;
 
-        for(;;) {
+        for (; ; ) {
             try {
+                while (!tasks.isEmpty()) {
+                    Runnable task = tasks.poll();
+                    task.run();
+                }
+
                 selector.select(1000L);
 
                 selectedKeys = selector.selectedKeys();
@@ -54,14 +61,14 @@ public class DefaultEventLoop implements EventLoop, Runnable {
                     SelectionKey key = iterator.next();
                     iterator.remove();
 
-                    Connection connection = (Connection)key.attachment();
+                    Connection connection = (Connection) key.attachment();
 
                     if (connection != null && key.isValid()) {
                         int readyOps = key.readyOps();
 
                         if ((readyOps & SelectionKey.OP_CONNECT) != 0) {
                             key.interestOps(key.interestOps() & ~SelectionKey.OP_CONNECT);
-                            ((SocketChannel)key.channel()).finishConnect();
+                            ((SocketChannel) key.channel()).finishConnect();
                         }
 
                         // write prior to read
@@ -74,8 +81,7 @@ public class DefaultEventLoop implements EventLoop, Runnable {
                             connection.read();
                         }
 
-                    }
-                    else {
+                    } else {
                         key.cancel();
                     }
                 }
@@ -89,20 +95,32 @@ public class DefaultEventLoop implements EventLoop, Runnable {
     public void register(Connection connection) {
         Objects.requireNonNull(connection);
 
-        connections.add(connection);
+        tasks.add(new RegisterTask(connection));
+    }
 
-        try {
-            final Selector selector = this.selector;
-            connection.channel().register(selector, SelectionKey.OP_READ, connection);
+    private class RegisterTask implements Runnable {
 
-            logger.info("{} connected.", connection.channel().getRemoteAddress());
+        private Connection connection;
 
-            connection.pipeline().fireRegistered();
-
+        public RegisterTask(Connection connection) {
+            this.connection = connection;
         }
-        catch (IOException e) {
-            logger.error("channel register error.", e);
-            throw new ReactorException(e);
+
+        @Override
+        public void run() {
+            connections.add(connection);
+
+            try {
+                connection.channel().register(selector, SelectionKey.OP_READ, connection);
+
+                logger.info("{} connected.", connection.channel().getRemoteAddress());
+
+                connection.pipeline().fireRegistered();
+
+            } catch (IOException e) {
+                logger.error("channel register error.", e);
+                throw new ReactorException(e);
+            }
         }
     }
 }
