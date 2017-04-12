@@ -72,7 +72,6 @@ public class DefaultEventLoop implements EventLoop, Runnable {
 
                         if ((readyOps & (SelectionKey.OP_READ)) != 0) {
                             connection.read();
-                            key.interestOps(key.interestOps() | SelectionKey.OP_WRITE);
                         }
 
                     }

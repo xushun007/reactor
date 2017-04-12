@@ -43,7 +43,7 @@ public class DefaultConnection implements Connection {
             if (count > 0) {
                 buffer.flip();
                 readBufferQueue.add(buffer);
-                writeBufferQueue.add(ByteBuffer.wrap(buffer.array(), 0, buffer.limit()));
+                //writeBufferQueue.add(ByteBuffer.wrap(buffer.array(), 0, buffer.limit()));
                 logger.info("connection {} read {} bytes", this.toString(), buffer.limit());
 
                 pipeline.fireRead(buffer);
