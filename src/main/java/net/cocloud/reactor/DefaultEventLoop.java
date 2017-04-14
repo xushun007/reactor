@@ -10,7 +10,7 @@ import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
 import java.nio.channels.SocketChannel;
 import java.util.*;
-import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ConcurrentLinkedQueue;
 
 public class DefaultEventLoop implements EventLoop, Runnable {
     private static final Logger logger = LoggerFactory.getLogger(DefaultEventLoop.class);
@@ -21,7 +21,7 @@ public class DefaultEventLoop implements EventLoop, Runnable {
 
     private List<Connection> connections = new LinkedList<>();
 
-    private Queue<Runnable> tasks = new LinkedBlockingQueue<>();
+    private Queue<Runnable> taskQueue = new ConcurrentLinkedQueue<>();
 
     public DefaultEventLoop(EventLoopGroup parent, String name) {
         this.parent = parent;
@@ -42,8 +42,8 @@ public class DefaultEventLoop implements EventLoop, Runnable {
 
         for (; ; ) {
             try {
-                while (!tasks.isEmpty()) {
-                    Runnable task = tasks.poll();
+                while (!taskQueue.isEmpty()) {
+                    Runnable task = taskQueue.poll();
                     task.run();
                 }
 
@@ -95,7 +95,7 @@ public class DefaultEventLoop implements EventLoop, Runnable {
     public void register(Connection connection) {
         Objects.requireNonNull(connection);
 
-        tasks.add(new RegisterTask(connection));
+        taskQueue.add(new RegisterTask(connection));
     }
 
     private class RegisterTask implements Runnable {
